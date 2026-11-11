@@ -10,6 +10,10 @@ export const languages = {
 
 export const defaultLang = 'en';
 
+// Temporary: the public site is English only.
+// Set this to true to restore the language switch and the /es and /fr pages.
+export const i18nEnabled = false;
+
 export const ui = {
   es,
   fr,

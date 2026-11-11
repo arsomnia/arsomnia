@@ -1,464 +1,203 @@
 ---
-// Animación de estructura compleja construida con partículas que se desintegran y reorganizan
+// Dibujo temporal: un círculo a mano, en un solo gesto.
+// Dos vueltas que no coinciden. Sin borrado.
 ---
 
-<canvas id="structure-canvas"></canvas>
-<div class="hero-bg-mobile"></div>
+<div class="sketch-stage" id="sketch-stage">
+	<canvas id="structure-canvas" aria-hidden="true"></canvas>
+</div>
 
 <style>
-	#structure-canvas {
+	.sketch-stage {
 		position: absolute;
-		top: 0;
-		right: 0;
+		inset: 0;
+	}
+
+	#structure-canvas {
+		display: block;
 		width: 100%;
 		height: 100%;
-		pointer-events: none;
-		opacity: 0.9;
-		contain: strict;
-		will-change: contents;
-	}
-
-	.hero-bg-mobile {
-		display: none;
-	}
-
-	@media (max-width: 1300px) {
-		#structure-canvas {
-			width: 50%;
-			opacity: 0.85;
-		}
-	}
-
-	@media (max-width: 1100px) {
-		#structure-canvas {
-			width: 45%;
-			opacity: 0.8;
-		}
-	}
-
-	@media (max-width: 1024px) {
-		#structure-canvas {
-			width: 40%;
-			opacity: 0.75;
-		}
-	}
-
-	@media (max-width: 900px) {
-		#structure-canvas {
-			display: none;
-		}
-
-		.hero-bg-mobile {
-			display: block;
-			position: absolute;
-			top: 0;
-			right: 0;
-			width: 60%;
-			height: 60%;
-			background: radial-gradient(circle at 80% 20%, rgba(212, 175, 55, 0.15) 0%, transparent 60%);
-			pointer-events: none;
-			opacity: 0.6;
-		}
-
-		.hero-bg-mobile::before {
-			content: '';
-			position: absolute;
-			top: 10%;
-			right: 10%;
-			width: 200px;
-			height: 200px;
-			background: radial-gradient(circle, rgba(212, 175, 55, 0.08) 0%, transparent 70%);
-			border-radius: 50%;
-			filter: blur(40px);
-		}
 	}
 </style>
 
 <script>
-	const canvas = document.getElementById('structure-canvas') as HTMLCanvasElement;
-	const ctx = canvas.getContext('2d')!;
+	const stage = document.getElementById('sketch-stage');
+	const canvas = document.getElementById('structure-canvas') as HTMLCanvasElement | null;
+	const ctx = canvas?.getContext('2d') ?? null;
 
-	let width = 0;
-	let height = 0;
-	const dpr = Math.max(1, window.devicePixelRatio || 1);
-
-	// Estado del cursor
-	let mouseX = -1000;
-	let mouseY = -1000;
-	let isVisible = true;
-	let animationId = 0;
-
-	// Seguimiento de movimiento del cursor
-	let lastMouseX = mouseX;
-	let lastMouseY = mouseY;
-	let lastMouseMoveTime = 0;
-	let isMouseMoving = false;
-	let lastInteractionTime = 0;
-
-	// Colores dorados para las partículas
-	const goldenColors = [
-		'rgba(212, 175, 55, 0.9)',   // Dorado base
-		'rgba(255, 215, 0, 0.85)',   // Dorado brillante
-		'rgba(218, 165, 32, 0.9)',   // Dorado oscuro
-		'rgba(238, 203, 100, 0.85)', // Dorado claro
-	];
-
-	// Muestreo de la superficie 3D
-	const THETA_STEPS = 80; // Alrededor
-	const PHI_STEPS = 40;   // De polo a polo
-
-	type Particle = {
-		theta: number;  // Coordenadas esféricas fijas
-		phi: number;
-		px: number;     // Posición proyectada base (sin dispersión)
-		py: number;
-		ox: number;     // Offset por dispersión
-		oy: number;
-		ovx: number;    // Velocidad del offset
-		ovy: number;
-		size: number;
-		color: string;
-	};
-
-	type ShapeParams = {
-		baseRadiusFactor: number;
-		a: number;
-		b: number;
-		c: number;
-		k1: number;
-		k2: number;
-		k3: number;
-		k4: number;
-		k5: number;
-		phase1: number;
-		phase2: number;
-		phase3: number;
-		phase4: number;
-	};
-
-	let particles: Particle[] = [];
-
-	// Parámetros de forma actuales y de destino (morphing)
-	let shapeFrom: ShapeParams;
-	let shapeTo: ShapeParams;
-	let morphT = 0;
-	let isMorphing = false;
-
-	// Rotación 3D lenta
-	let rotX = 0;
-	let rotY = 0;
-	let rotZ = 0;
-
-	function resize() {
-		width = canvas.clientWidth;
-		height = canvas.clientHeight;
-		canvas.width = Math.floor(width * dpr);
-		canvas.height = Math.floor(height * dpr);
-		ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-	}
-
-	function randomShapeParams(): ShapeParams {
-		return {
-			// Radio base alto: formas más compactas y legibles
-			baseRadiusFactor: 0.78 + Math.random() * 0.12, // 78–90% del alto disponible
-			// Amplitud moderada: variación clara pero sin romper la masa principal
-			a: 0.18 + Math.random() * 0.35,
-			b: 0.18 + Math.random() * 0.35,
-			c: 0.08 + Math.random() * 0.25,
-			// Frecuencias variadas pero acotadas para evitar ruido excesivo
-			k1: 1 + Math.floor(Math.random() * 6),
-			k2: 1 + Math.floor(Math.random() * 6),
-			k3: 1 + Math.floor(Math.random() * 6),
-			k4: 1 + Math.floor(Math.random() * 6),
-			k5: 2 + Math.floor(Math.random() * 6),
-			phase1: Math.random() * Math.PI * 2,
-			phase2: Math.random() * Math.PI * 2,
-			phase3: Math.random() * Math.PI * 2,
-			phase4: Math.random() * Math.PI * 2,
+	if (stage && canvas && ctx) {
+		type Pt = { x: number; y: number };
+		type Stroke = {
+			pts: Pt[];
+			width: number;
+			alpha: number;
+			start: number;
+			end: number;
 		};
-	}
 
-	function copyShapeParams(src: ShapeParams): ShapeParams {
-		return { ...src };
-	}
+		const INK = '27, 24, 21';
+		const BUILD_MS = 2000;
+		const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-	function lerp(a: number, b: number, t: number): number {
-		return a + (b - a) * t;
-	}
+		let width = 0;
+		let height = 0;
+		let progress = 0;
+		let animationId = 0;
+		let buildStart = 0;
+		let isVisible = true;
+		let resting = false;
 
-	function lerpShape(a: ShapeParams, b: ShapeParams, t: number): ShapeParams {
-		return {
-			baseRadiusFactor: lerp(a.baseRadiusFactor, b.baseRadiusFactor, t),
-			a: lerp(a.a, b.a, t),
-			b: lerp(a.b, b.b, t),
-			c: lerp(a.c, b.c, t),
-			k1: lerp(a.k1, b.k1, t),
-			k2: lerp(a.k2, b.k2, t),
-			k3: lerp(a.k3, b.k3, t),
-			k4: lerp(a.k4, b.k4, t),
-			k5: lerp(a.k5, b.k5, t),
-			phase1: lerp(a.phase1, b.phase1, t),
-			phase2: lerp(a.phase2, b.phase2, t),
-			phase3: lerp(a.phase3, b.phase3, t),
-			phase4: lerp(a.phase4, b.phase4, t),
-		};
-	}
-
-	function startMorphToNewShape() {
-		shapeFrom = getCurrentShape();
-		shapeTo = randomShapeParams();
-		morphT = 0;
-		isMorphing = true;
-	}
-
-	function getCurrentShape(): ShapeParams {
-		if (!shapeFrom || !shapeTo) {
-			shapeFrom = randomShapeParams();
-			shapeTo = copyShapeParams(shapeFrom);
-		}
-		if (!isMorphing) {
-			return copyShapeParams(shapeTo);
-		}
-		return lerpShape(shapeFrom, shapeTo, morphT);
-	}
-
-	function initParticles() {
-		particles = [];
-		for (let j = 0; j < PHI_STEPS; j++) {
-			const v = j / (PHI_STEPS - 1);
-			const phi = v * Math.PI; // 0..PI
-			for (let i = 0; i < THETA_STEPS; i++) {
-				const u = i / THETA_STEPS;
-				const theta = u * Math.PI * 2; // 0..2PI
-				particles.push({
-					theta,
-					phi,
-					px: 0,
-					py: 0,
-					ox: 0,
-					oy: 0,
-					ovx: 0,
-					ovy: 0,
-					size: 1.5 + Math.random() * 1.2,
-					color: goldenColors[Math.floor(Math.random() * goldenColors.length)],
+		// Un solo trazo: la mano da dos vueltas y la segunda no cae sobre la primera.
+		function handCircle(): Pt[] {
+			const turns = 2.79;
+			const steps = 420;
+			const presets = [
+				{ r: 0, x: 0, y: 0 },
+				{ r: 0.026, x: 0.009, y: 0.004 },
+				{ r: 0.012, x: -0.008, y: 0.01 },
+			];
+			const pts: Pt[] = [];
+			for (let i = 0; i <= steps; i++) {
+				const u = i / steps;
+				const angle = -Math.PI * 0.55 + u * turns * Math.PI * 2;
+				const pass = u * turns;
+				const lap = Math.min(presets.length - 1, Math.floor(pass));
+				const blend = lap >= presets.length - 1 ? 0 : Math.min(1, (pass - lap) / 0.2);
+				const from = presets[lap];
+				const to = presets[Math.min(presets.length - 1, lap + 1)];
+				const miss = from.r + (to.r - from.r) * blend;
+				const ox = from.x + (to.x - from.x) * blend;
+				const oy = from.y + (to.y - from.y) * blend;
+				const wobble =
+					Math.sin(angle * 2 + 0.4) * 0.009 +
+					Math.cos(angle * 3 + pass * 0.35) * 0.005;
+				const radius = 0.3 + wobble + miss;
+				pts.push({
+					x: ox + Math.cos(angle) * radius,
+					y: oy + Math.sin(angle) * radius,
 				});
 			}
-		}
-	}
-
-	function updateScene() {
-		const now = performance.now();
-
-		// Detectar movimiento del ratón
-		const moved = mouseX !== lastMouseX || mouseY !== lastMouseY;
-		if (moved) {
-			lastMouseMoveTime = now;
-			isMouseMoving = true;
-			lastMouseX = mouseX;
-			lastMouseY = mouseY;
-		} else if (now - lastMouseMoveTime > 80) {
-			isMouseMoving = false;
+			return pts;
 		}
 
-		// Actualizar morphing de la forma (más lento y fluido)
-		if (isMorphing) {
-			morphT += 0.01;
-			if (morphT >= 1) {
-				morphT = 1;
-				isMorphing = false;
-				shapeFrom = copyShapeParams(shapeTo);
+		const strokes: Stroke[] = [
+			{ pts: handCircle(), width: 5.2, alpha: 0.92, start: 0, end: 1 },
+		];
+
+		function resize() {
+			const rect = stage.getBoundingClientRect();
+			width = rect.width;
+			height = rect.height;
+			if (width < 2 || height < 2) return false;
+			const dpr = Math.min(2, window.devicePixelRatio || 1);
+			canvas.width = Math.floor(width * dpr);
+			canvas.height = Math.floor(height * dpr);
+			ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+			return true;
+		}
+
+		function sliceTo(pts: Pt[], t: number): Pt[] {
+			if (t >= 1) return pts;
+			if (t <= 0 || pts.length < 2) return [];
+			let total = 0;
+			const seg: number[] = [];
+			for (let i = 1; i < pts.length; i++) {
+				const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+				seg.push(d);
+				total += d;
 			}
-		}
-		// Easing muy suave para un morph calmado y continuo
-		const tShape = morphT;
-		const easedT = tShape * tShape * (3 - 2 * tShape); // smoothstep
-		const shape = isMorphing ? lerpShape(shapeFrom, shapeTo, easedT) : getCurrentShape();
-
-		// Rotación lenta 3D
-		rotY += 0.0035;
-		rotX += 0.0018;
-		rotZ += 0.0009;
-
-		const minDim = Math.min(width, height);
-		const baseRadius = shape.baseRadiusFactor * (minDim * 0.4);
-		// Centrar la estructura algo más a la derecha para que algunas partículas
-		// crucen suavemente hacia la zona de texto sin una división abrupta
-		const cx = width * 0.65;
-		const cy = height * 0.5;
-		const fov = 420;
-
-		const INFLUENCE_RADIUS = 85; // Radio de influencia del cursor ligeramente mayor
-		const influenceRadiusSq = INFLUENCE_RADIUS * INFLUENCE_RADIUS;
-
-		let affectedCount = 0;
-		const AFFECTED_OFFSET = 1; // px de desplazamiento considerados como "afectados"
-
-		particles.forEach((p) => {
-			// Radio orgánico a partir de armónicos aleatorios,
-			// limitado para mantener la forma compacta y legible
-			const rawPattern =
-				shape.a * Math.sin(shape.k1 * p.theta + shape.phase1) * Math.sin(shape.k2 * p.phi + shape.phase2) +
-				shape.b * Math.cos(shape.k3 * p.theta + shape.phase3) * Math.cos(shape.k4 * p.phi + shape.phase4) +
-				shape.c * Math.sin(shape.k5 * (p.theta + p.phi));
-
-			// Clamp suave del patrón para evitar rayos demasiado alejados
-			const clamped = Math.max(-1, Math.min(1, rawPattern));
-			const r = baseRadius * (1 + clamped * 0.35);
-
-			// Coordenadas esféricas -> 3D
-			let x = r * Math.sin(p.phi) * Math.cos(p.theta);
-			let y = r * Math.cos(p.phi);
-			let z = r * Math.sin(p.phi) * Math.sin(p.theta);
-
-			 // Rotación en X
-			let y1 = y * Math.cos(rotX) - z * Math.sin(rotX);
-			let z1 = y * Math.sin(rotX) + z * Math.cos(rotX);
-			let x1 = x;
-
-			// Rotación en Y
-			let x2 = x1 * Math.cos(rotY) + z1 * Math.sin(rotY);
-			let z2 = -x1 * Math.sin(rotY) + z1 * Math.cos(rotY);
-
-			// Rotación en Z
-			const x3 = x2 * Math.cos(rotZ) - y1 * Math.sin(rotZ);
-			const y3 = x2 * Math.sin(rotZ) + y1 * Math.cos(rotZ);
-			const z3 = z2;
-
-			// Proyección en perspectiva
-			const scale = fov / (fov + z3);
-			const projX = cx + x3 * scale;
-			const projY = cy + y3 * scale;
-
-			p.px = projX;
-			p.py = projY;
-
-			// Dispersión puntual alrededor del cursor (solo puntos tocados)
-			if (isMouseMoving) {
-				const dx = projX - mouseX;
-				const dy = projY - mouseY;
-				const distSq = dx * dx + dy * dy;
-				if (distSq < influenceRadiusSq) {
-					const dist = Math.sqrt(distSq) || 0.001;
-					const strength = (INFLUENCE_RADIUS - dist) / INFLUENCE_RADIUS;
-					const impulse = strength * 5; // fuerza de empuje más suave
-					// Empuje radial alejándose del cursor
-					p.ovx += (dx / dist) * impulse;
-					p.ovy += (dy / dist) * impulse;
-					lastInteractionTime = now;
+			const target = total * t;
+			const out: Pt[] = [pts[0]];
+			let acc = 0;
+			for (let i = 1; i < pts.length; i++) {
+				const d = seg[i - 1];
+				if (acc + d >= target) {
+					const f = d === 0 ? 1 : (target - acc) / d;
+					out.push({
+						x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * f,
+						y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * f,
+					});
+					break;
 				}
+				out.push(pts[i]);
+				acc += d;
 			}
-
-			// Actualizar offsets (dispersión + retorno elástico)
-			// Dinámica de partículas en 2D sobre la proyección
-			p.ox += p.ovx;
-			p.oy += p.ovy;
-
-			// Amortiguación
-			p.ovx *= 0.85;
-			p.ovy *= 0.85;
-
-			// Resorte suave de vuelta a la estructura
-			const spring = 0.06;
-			p.ox += (0 - p.ox) * spring;
-			p.oy += (0 - p.oy) * spring;
-
-			// Contabilizar partículas significativamente desplazadas
-			const offDistSq = p.ox * p.ox + p.oy * p.oy;
-			if (offDistSq > AFFECTED_OFFSET * AFFECTED_OFFSET) {
-				affectedCount++;
-			}
-		});
-
-		// Si hubo interacción y el ratón se ha parado, lanzar una nueva forma
-		// solo si al menos el 30% de las partículas se han visto afectadas
-		if (!isMorphing && lastInteractionTime > 0 && now - lastInteractionTime > 800) {
-			const affectedFraction = particles.length > 0 ? affectedCount / particles.length : 0;
-			if (affectedFraction >= 0.3) {
-				startMorphToNewShape();
-			}
-			lastInteractionTime = 0;
+			return out;
 		}
-	}
 
-	function drawScene() {
-		ctx.clearRect(0, 0, width, height);
+		function draw(amount: number) {
+			if (width < 2 || height < 2) return;
+			ctx.clearRect(0, 0, width, height);
+			ctx.lineCap = 'round';
+			ctx.lineJoin = 'round';
+			const unit = Math.min(width, height);
+			const cx = width * 0.5;
+			const cy = height * 0.5;
+			const scale = Math.max(1.05, Math.min(unit / 420, 1.8));
 
-		// Opcional: ordenar por profundidad para un look más 3D
-		const sorted = [...particles].sort((a, b) => {
-			// comparador aproximado usando la distancia al centro (los más lejanos primero)
-			const da = (a.px - width * 0.5) ** 2 + (a.py - height * 0.5) ** 2;
-			const db = (b.px - width * 0.5) ** 2 + (b.py - height * 0.5) ** 2;
-			return db - da;
-		});
-
-		sorted.forEach((p) => {
-			const x = p.px + p.ox;
-			const y = p.py + p.oy;
-
-			// Glow sutil
-			ctx.shadowBlur = 6;
-			ctx.shadowColor = p.color;
-
-			ctx.fillStyle = p.color;
-			ctx.beginPath();
-			ctx.arc(x, y, p.size, 0, Math.PI * 2);
-			ctx.fill();
-		});
-	}
-
-	// Loop principal
-	function render() {
-		if (!isVisible) return;
-
-		updateScene();
-		drawScene();
-
-		animationId = requestAnimationFrame(render);
-	}
-
-	// Actualizar posición del cursor (coordenadas relativas al canvas)
-	function onMove(e: MouseEvent) {
-		const rect = canvas.getBoundingClientRect();
-		mouseX = e.clientX - rect.left;
-		mouseY = e.clientY - rect.top;
-	}
-
-	// Optimización: pausar animación cuando no está visible
-	const observer = new IntersectionObserver((entries) => {
-		entries.forEach((entry) => {
-			const wasVisible = isVisible;
-			isVisible = entry.isIntersecting;
-			if (isVisible && !wasVisible) {
-				animationId = requestAnimationFrame(render);
-			} else if (!isVisible && animationId) {
-				cancelAnimationFrame(animationId);
+			for (const stroke of strokes) {
+				const span = stroke.end - stroke.start;
+				const local = Math.max(0, Math.min(1, (amount - stroke.start) / span));
+				if (local <= 0) continue;
+				const partial = sliceTo(stroke.pts, local);
+				if (partial.length < 2) continue;
+				const mapped = partial.map((p) => ({
+					x: cx + p.x * unit,
+					y: cy + p.y * unit,
+				}));
+				ctx.beginPath();
+				ctx.moveTo(mapped[0].x, mapped[0].y);
+				for (let i = 1; i < mapped.length; i++) ctx.lineTo(mapped[i].x, mapped[i].y);
+				ctx.strokeStyle = `rgba(${INK}, ${stroke.alpha})`;
+				ctx.lineWidth = stroke.width * scale;
+				ctx.stroke();
 			}
+		}
+
+		function tick(now: number) {
+			if (width < 2) resize();
+			progress = Math.min(1, (now - buildStart) / BUILD_MS);
+			draw(progress);
+			if (progress >= 1) {
+				resting = true;
+				return;
+			}
+			if (isVisible) animationId = requestAnimationFrame(tick);
+		}
+
+		function start() {
+			cancelAnimationFrame(animationId);
+			buildStart = performance.now() - progress * BUILD_MS;
+			animationId = requestAnimationFrame(tick);
+		}
+
+		const visibility = new IntersectionObserver((entries) => {
+			const was = isVisible;
+			isVisible = entries.some((entry) => entry.isIntersecting);
+			if (isVisible && !was && !resting) start();
+			if (!isVisible && animationId) cancelAnimationFrame(animationId);
+		}, { threshold: 0.05 });
+		visibility.observe(stage);
+
+		const resizeObserver = new ResizeObserver(() => {
+			if (resize()) draw(progress);
 		});
-	}, { threshold: 0.1 });
+		resizeObserver.observe(stage);
 
-	observer.observe(canvas);
+		if (reduceMotion) {
+			progress = 1;
+			resting = true;
+		}
+		requestAnimationFrame(() => {
+			resize();
+			draw(progress);
+			if (!reduceMotion) start();
+		});
 
-	function handleResize() {
-		resize();
-		initParticles();
+		document.addEventListener('astro:before-swap', () => {
+			visibility.disconnect();
+			resizeObserver.disconnect();
+			cancelAnimationFrame(animationId);
+		});
 	}
-
-	window.addEventListener('resize', handleResize);
-	window.addEventListener('mousemove', onMove, { passive: true });
-
-	// Inicialización
-	resize();
-	shapeFrom = randomShapeParams();
-	shapeTo = copyShapeParams(shapeFrom);
-	initParticles();
-	animationId = requestAnimationFrame(render);
-
-	// Limpieza al navegar
-	document.addEventListener('astro:before-swap', () => {
-		observer.disconnect();
-		cancelAnimationFrame(animationId);
-		window.removeEventListener('resize', handleResize);
-		window.removeEventListener('mousemove', onMove);
-	});
 </script>
-

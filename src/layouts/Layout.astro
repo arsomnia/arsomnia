@@ -1,6 +1,6 @@
 ---
 import LanguageSelector from '../components/LanguageSelector.astro';
-import { getLangFromUrl, useTranslations } from '../i18n/utils';
+import { getLangFromUrl, i18nEnabled, useTranslations } from '../i18n/utils';
 
 interface Props {
 	title?: string;
@@ -48,7 +48,7 @@ const homeUrl = currentLang === 'en' ? '/' : `/${currentLang}/`;
 				<li><a href={`${homeUrl}#proyectos`}>{t('nav.projects')}</a></li>
 				<li><a href={`${homeUrl}#contacto`}>{t('nav.contact')}</a></li>
 			</ul>
-			<LanguageSelector currentLang={currentLang} />
+			{i18nEnabled && <LanguageSelector currentLang={currentLang} />}
 			</div>
 		</nav>
 		
@@ -130,13 +130,13 @@ const homeUrl = currentLang === 'en' ? '/' : `/${currentLang}/`;
 	}
 
 	:root {
-		--color-bg: #0D0D0D;
-		--color-bg-secondary: #141311;
-		--color-text: #F5F5F5;
-		--color-text-light: #d5cfcf;
-		--color-accent: #D4AF37;
-		--color-accent-secondary: #1F1D1A;
-		--color-white: #FFFFFF;
+		--color-bg: #F3F0E8;
+		--color-bg-secondary: #E7E1D6;
+		--color-text: #161513;
+		--color-text-light: #5C564C;
+		--color-accent: #161513;
+		--color-accent-secondary: #F7F4EE;
+		--color-white: #F7F4EE;
 		--font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Display", Roboto, "Helvetica Neue", Arial, sans-serif;
 		--font-display: ui-serif, "New York", Georgia, "Times New Roman", serif;
 	}
@@ -160,6 +160,28 @@ const homeUrl = currentLang === 'en' ? '/' : `/${currentLang}/`;
 		color: var(--color-text);
 		font-family: var(--font-main);
 		line-height: 1.6;
+		line-height: 1.65;
+		-webkit-font-smoothing: antialiased;
+	}
+
+	body::before {
+		content: "";
+		position: fixed;
+		inset: 0;
+		pointer-events: none;
+		z-index: 4000;
+		opacity: 0.55;
+		background-image: url("/paper-grain.png");
+		background-size: 180px 180px;
+	}
+
+	::selection {
+		background: var(--color-text);
+		color: var(--color-bg);
+	}
+
+	img {
+		filter: grayscale(1) contrast(1.04);
 	}
 
 	.nav {
@@ -167,17 +189,17 @@ const homeUrl = currentLang === 'en' ? '/' : `/${currentLang}/`;
 		top: 0;
 		left: 0;
 		right: 0;
-		background: rgba(13, 13, 13, 0.98);
-		border-bottom: 1px solid rgba(212, 175, 55, 0.1);
+		background: rgba(243, 240, 232, 0.92);
+		backdrop-filter: blur(10px);
+		border-bottom: 1px solid rgba(22, 21, 19, 0.12);
 		z-index: 1000;
-		padding: 1.5rem 0;
-		will-change: transform;
+		padding: 1.15rem 0;
 	}
 
 	.nav-container {
-		max-width: 1400px;
+		max-width: 1180px;
 		margin: 0 auto;
-		padding: 0 2rem;
+		padding: 0 clamp(1.5rem, 5vw, 4.5rem);
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
@@ -205,10 +227,12 @@ const homeUrl = currentLang === 'en' ? '/' : `/${currentLang}/`;
 
 	.logo-icon {
 		height: 38px;
+		height: 34px;
 		width: auto;
 		flex-shrink: 0;
 		object-fit: contain;
 		display: block;
+		filter: brightness(0);
 	}
 
 	.logo-text {
@@ -330,18 +354,20 @@ const homeUrl = currentLang === 'en' ? '/' : `/${currentLang}/`;
 		.language-selector { order: 2; margin-left: auto; margin-right: 0.5rem; }
 
 		.menu-toggle { display: flex; flex-shrink: 0; order: 3; margin-left: 0; }
+		.menu-toggle { display: flex; flex-shrink: 0; order: 3; margin-left: auto; }
 
+		.nav-container:has(.language-selector) .menu-toggle { margin-left: 0; }
 		.nav-links {
 			position: fixed;
 			top: 64px;
 			left: 0;
 			right: 0;
 			background: rgba(13, 13, 13, 0.98);
+			background: rgba(243, 240, 232, 0.98);
 			flex-direction: column;
 			gap: 0;
 			padding: 1rem 0;
-			border-bottom: 1px solid rgba(212, 175, 55, 0.1);
-			max-height: 0;
+			border-bottom: 1px solid rgba(22, 21, 19, 0.12);
 			overflow: hidden;
 			opacity: 0;
 			transition: all 0.3s ease;
@@ -357,6 +383,7 @@ const homeUrl = currentLang === 'en' ? '/' : `/${currentLang}/`;
 		.nav-links li {
 			width: 100%;
 			border-bottom: 1px solid rgba(212, 175, 55, 0.05);
+			border-bottom: 1px solid rgba(22, 21, 19, 0.08);
 		}
 
 		.nav-links li:last-child {
@@ -371,8 +398,7 @@ const homeUrl = currentLang === 'en' ? '/' : `/${currentLang}/`;
 		}
 
 		.nav-links a:hover, .nav-links a.active {
-			background: rgba(212, 175, 55, 0.05);
-			padding-left: 2rem;
+			background: rgba(22, 21, 19, 0.04);
 			color: var(--color-accent);
 			text-decoration: none;
 		}

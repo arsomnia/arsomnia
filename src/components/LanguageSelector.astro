@@ -59,10 +59,10 @@ function getLocalizedPath(lang: string) {
 		align-items: center;
 		gap: 0.5rem;
 		background: none;
-		border: 1px solid rgba(212, 175, 55, 0.3);
+		border: 1px solid rgba(22, 21, 19, 0.28);
 		color: var(--color-text);
 		padding: 0.5rem 1rem;
-		border-radius: 8px;
+		border-radius: 0;
 		cursor: pointer;
 		font-size: 0.9rem;
 		font-weight: 500;
@@ -70,8 +70,8 @@ function getLocalizedPath(lang: string) {
 	}
 
 	.lang-toggle:hover {
-		border-color: var(--color-accent);
-		background: rgba(212, 175, 55, 0.05);
+		border-color: var(--color-text);
+		background: transparent;
 	}
 
 	.lang-toggle svg {
@@ -88,16 +88,16 @@ function getLocalizedPath(lang: string) {
 		position: absolute;
 		top: calc(100% + 0.5rem);
 		right: 0;
-		background: rgba(13, 13, 13, 0.98);
-		border: 1px solid rgba(212, 175, 55, 0.2);
-		border-radius: 8px;
+		background: var(--color-bg);
+		border: 1px solid rgba(22, 21, 19, 0.18);
+		border-radius: 0;
 		overflow: hidden;
 		opacity: 0;
 		visibility: hidden;
 		transform: translateY(-10px);
 		transition: all 0.3s ease;
 		min-width: 150px;
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+		box-shadow: 0 16px 40px rgba(22, 21, 19, 0.08);
 		z-index: 100;
 	}
 
@@ -114,7 +114,7 @@ function getLocalizedPath(lang: string) {
 		text-decoration: none;
 		transition: all 0.2s ease;
 		font-size: 0.95rem;
-		border-bottom: 1px solid rgba(212, 175, 55, 0.05);
+		border-bottom: 1px solid rgba(22, 21, 19, 0.08);
 	}
 
 	.lang-option:last-child {
@@ -122,14 +122,14 @@ function getLocalizedPath(lang: string) {
 	}
 
 	.lang-option:hover {
-		background: rgba(212, 175, 55, 0.1);
-		color: var(--color-accent);
+		background: rgba(22, 21, 19, 0.05);
+		color: var(--color-text);
 		padding-left: 1.5rem;
 	}
 
 	.lang-option.active {
-		color: var(--color-accent);
-		background: rgba(212, 175, 55, 0.05);
+		color: var(--color-text);
+		background: transparent;
 	}
 
 	@media (max-width: 768px) {
