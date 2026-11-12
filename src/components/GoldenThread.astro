@@ -2,8 +2,8 @@
 // El hilo dorado de la página, ligado al scroll (y reversible):
 //   1. nace del ojo del cadavre exquis (≈3 s),
 //   2. cae serpenteando mientras se baja (los ojos del retrato la siguen),
-//   3. en proyectos germina en un micelio que ocupa toda la pantalla, por detrás,
-//   4. en contacto el micelio se recoge en «motas».
+//   3. al cruzar el lema revienta y salpica manchas de pintura por toda la pantalla, por detrás,
+//   4. en contacto las manchas se deshacen en polen, que flota y se aparta del ratón.
 ---
 
 <canvas id="thread-back" class="thread-canvas thread-back" aria-hidden="true"></canvas>
@@ -95,9 +95,8 @@
 		let vh = 0;
 		let dpr = 1;
 		let eye = { x: 0, y: 0, r: 8 }; // en coordenadas de documento
-		let s1 = 1; // scroll en el que la bola aterriza en proyectos
-		let s2 = 2; // scroll en el que el micelio empieza a recogerse
-		let mSpan = 1;
+		let s1 = 1; // scroll en el que la bola cruza el lema y revienta
+		let s2 = 2; // scroll en el que las manchas empiezan a deshacerse
 		let qSpan = 1;
 		let cx = 0;
 		let hubY = 0;
@@ -105,163 +104,188 @@
 		let pupils: { el: SVGCircleElement; cx: number; cy: number; ox: number; oy: number }[] = [];
 		let portrait: SVGSVGElement | null = null;
 
-		// ---------- micelio ----------
-		type Branch = { pts: Float32Array; t0: number; depth: number; near: Float32Array };
-		let branches: Branch[] = [];
-		let tMax = 1;
-		let nearMax = 1;
+		// ---------- manchas de pintura ----------
+		// Al cruzar el lema la bola revienta: salpica gotas que caen por toda la
+		// pantalla y se abren en manchas. En contacto las manchas se deshacen en polen.
+		type Stain = {
+			x: number; y: number; r: number;
+			path: Path2D; // la mancha, en coordenadas locales (radio ≈ 1)
+			color: string; alpha: number;
+			arrive: number; // momento de la salpicadura (0…1) en el que cae su gota
+			burst: number; // q en el que empieza a deshacerse
+			rot: number;
+		};
+		type Grain = {
+			hx: number; hy: number; // el punto de la mancha del que nace
+			th: number;
+			sx: number; sy: number; // hacia dónde se dispersa
+			r: number; a: number; soft: boolean;
+			amp: number; f1: number; f2: number; p1: number; p2: number;
+			ox: number; oy: number; vx: number; vy: number; // empujón del ratón
+		};
+		let stains: Stain[] = [];
+		let grains: Grain[] = [];
 		let netW = 0;
 		let netH = 0;
+		let splash = 0; // 0 → 1 cuando la bola revienta (con el tiempo, no con el scroll)
 
-		type Hair = { a: number; len: number; bend: number; phase: number; curl: number };
-		type Mota = { x: number; y: number; rx: number; ry: number; rot: number; hairs: Hair[]; phase: number };
-		let motas: Mota[] = [];
+		// El grano de polen: un núcleo dorado con un halo suave, pintado una sola vez.
+		function makeSprite(stops: [number, string][]) {
+			const c = document.createElement('canvas');
+			c.width = 64;
+			c.height = 64;
+			const g = c.getContext('2d')!;
+			const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+			for (const [at, color] of stops) grad.addColorStop(at, color);
+			g.fillStyle = grad;
+			g.fillRect(0, 0, 64, 64);
+			return c;
+		}
+		const CORE = 0.28; // fracción del sprite que ocupa el núcleo
+		const grainSprite = makeSprite([
+			[0, `rgba(${GOLD_DEEP}, 1)`],
+			[0.2, `rgba(${GOLD}, 1)`],
+			[CORE + 0.04, `rgba(${GOLD}, 0.6)`],
+			[0.52, `rgba(${GOLD}, 0.17)`],
+			[1, `rgba(${GOLD}, 0)`],
+		]);
+		const softSprite = makeSprite([
+			[0, `rgba(${GOLD}, 0.55)`],
+			[0.55, `rgba(${GOLD}, 0.3)`],
+			[1, `rgba(${GOLD}, 0)`],
+		]);
 
-		function buildNetwork() {
-			const rand = rng(20261112);
-			const top = -40;
-			const bottom = vh * 1.2 + 40;
-			const left = -40;
-			const right = vw + 40;
-			const cell = vw < 700 ? 14 : 16;
-			const cols = Math.ceil((right - left) / cell) + 1;
-			const rows = Math.ceil((bottom - top) / cell) + 1;
-			const grid = new Int32Array(cols * rows).fill(-1);
-			const step = 6.5;
-			const maxPoints = vw < 700 ? 6000 : 13000;
+		function buildStains() {
+			const rand = rng(20261114);
+			const small = vw < 700;
+			const TAU = Math.PI * 2;
+			const COLORS = [GOLD, GOLD, GOLD_DEEP, GOLD_LIGHT];
 
-			type Tip = { x: number; y: number; a: number; curve: number; depth: number; id: number; age: number; pts: number[]; t0: number };
-			const done: Tip[] = [];
-			let tips: Tip[] = [];
-			let nextId = 0;
-			const first = 9;
-			for (let k = 0; k < first; k++) {
-				tips.push({
-					x: cx, y: hubY,
-					a: (k / first) * Math.PI * 2 + (rand() - 0.5) * 0.5,
-					curve: (rand() - 0.5) * 0.08,
-					depth: 0, id: nextId++, age: 0, pts: [cx, hubY], t0: 0,
+			// Una mancha: un borrón irregular, con chorros hacia fuera y gotas sueltas.
+			// `dir` es hacia dónde volaba la gota (null = impacto central, en todas direcciones).
+			const blot = (dir: number | null, big: boolean) => {
+				const path = new Path2D();
+				const n = 44;
+				const h = [2, 3, 4, 5, 7, 9].map((f) => ({ f, a: (rand() * 0.5) / Math.sqrt(f), p: rand() * TAU }));
+				const pts: number[] = [];
+				for (let i = 0; i < n; i++) {
+					const a = (i / n) * TAU;
+					let r = 1;
+					for (const k of h) r += k.a * 0.36 * Math.sin(a * k.f + k.p);
+					if (dir !== null) r *= 1 + 0.22 * Math.cos(a - dir); // estirada en el sentido del vuelo
+					pts.push(Math.cos(a) * r, Math.sin(a) * r);
+				}
+				// curva cerrada y suave por los puntos medios
+				path.moveTo((pts[0] + pts[n * 2 - 2]) / 2, (pts[1] + pts[n * 2 - 1]) / 2);
+				for (let i = 0; i < n; i++) {
+					const j = ((i + 1) % n) * 2;
+					path.quadraticCurveTo(pts[i * 2], pts[i * 2 + 1], (pts[i * 2] + pts[j]) / 2, (pts[i * 2 + 1] + pts[j + 1]) / 2);
+				}
+				path.closePath();
+
+				// chorros: una lengua que se afina y acaba en una gota
+				const rays = (big ? 9 : 3) + Math.floor(rand() * (big ? 5 : 4));
+				for (let k = 0; k < rays; k++) {
+					const a = dir === null ? (k / rays) * TAU + (rand() - 0.5) * 0.5 : dir + (rand() - 0.5) * 2.4;
+					const len = 1.25 + Math.pow(rand(), 1.5) * (big ? 1.5 : 1.1);
+					const w = 0.07 + rand() * 0.1;
+					const ca = Math.cos(a);
+					const sa = Math.sin(a);
+					// triángulo en el mismo sentido de giro que el borrón y los arcos
+					path.moveTo(ca * 0.7 + sa * w, sa * 0.7 - ca * w);
+					path.lineTo(ca * len + sa * w * 0.35, sa * len - ca * w * 0.35);
+					path.lineTo(ca * len - sa * w * 0.35, sa * len + ca * w * 0.35);
+					path.lineTo(ca * 0.7 - sa * w, sa * 0.7 + ca * w);
+					path.closePath();
+					const br = w * (0.75 + rand() * 0.6);
+					path.moveTo(ca * len + br, sa * len);
+					path.arc(ca * len, sa * len, br, 0, TAU);
+				}
+				// gotas sueltas alrededor
+				const drops = (big ? 16 : 5) + Math.floor(rand() * 6);
+				for (let k = 0; k < drops; k++) {
+					const a = dir === null ? rand() * TAU : dir + (rand() - 0.5) * 3.4;
+					const d = 1.35 + Math.pow(rand(), 1.4) * (big ? 2.2 : 1.5);
+					const r = 0.03 + Math.pow(rand(), 2) * 0.13;
+					path.moveTo(Math.cos(a) * d + r, Math.sin(a) * d);
+					path.arc(Math.cos(a) * d, Math.sin(a) * d, r, 0, TAU);
+				}
+				return path;
+			};
+
+			// la mancha del impacto, en el centro, y las demás repartidas por la pantalla
+			const base = Math.min(vw, vh);
+			const count = small ? 6 : 10;
+			const centers: number[] = [cx, hubY];
+			const top = vh * 0.1;
+			const bottom = vh * 1.12;
+			while (centers.length / 2 < count) {
+				let bx = 0;
+				let by = 0;
+				let bestD = -1;
+				for (let t = 0; t < 40; t++) {
+					const x = vw * (0.05 + rand() * 0.9);
+					const y = top + rand() * (bottom - top);
+					let d = Infinity;
+					for (let j = 0; j < centers.length; j += 2) d = Math.min(d, Math.hypot(x - centers[j], (y - centers[j + 1]) * 1.15));
+					if (d > bestD) {
+						bestD = d;
+						bx = x;
+						by = y;
+					}
+				}
+				centers.push(bx, by);
+			}
+			let far = 1;
+			for (let i = 0; i < centers.length; i += 2) far = Math.max(far, Math.hypot(centers[i] - cx, centers[i + 1] - hubY));
+
+			stains = [];
+			for (let i = 0; i < centers.length; i += 2) {
+				const x = centers[i];
+				const y = centers[i + 1];
+				const central = i === 0;
+				const d = Math.hypot(x - cx, y - hubY);
+				stains.push({
+					x, y,
+					r: central ? base * (small ? 0.13 : 0.1) : base * (small ? 0.06 + rand() * 0.07 : 0.045 + rand() * 0.075),
+					path: blot(central ? null : Math.atan2(y - hubY, x - cx), central),
+					color: central ? GOLD : COLORS[Math.floor(rand() * COLORS.length)],
+					alpha: central ? 0.5 : 0.34 + rand() * 0.2,
+					arrive: central ? 0 : 0.12 + 0.4 * (d / far) + rand() * 0.06,
+					burst: 0.04 + 0.42 * (1 - d / far) + rand() * 0.08,
+					rot: rand() * TAU,
 				});
 			}
 
-			let time = 0;
-			let total = 0;
-			while (tips.length && total < maxPoints) {
-				time++;
-				const next: Tip[] = [];
-				for (const tip of tips) {
-					tip.curve = clamp(tip.curve + (rand() - 0.5) * 0.03, -0.07, 0.07);
-					tip.a += tip.curve + (rand() - 0.5) * 0.16;
-					const nx = tip.x + Math.cos(tip.a) * step;
-					const ny = tip.y + Math.sin(tip.a) * step;
-					if (nx < left || nx > right || ny < top || ny > bottom) {
-						done.push(tip);
-						continue;
-					}
-					const gi = Math.floor((ny - top) / cell) * cols + Math.floor((nx - left) / cell);
-					const owner = grid[gi];
-					tip.x = nx;
-					tip.y = ny;
-					tip.pts.push(nx, ny);
-					tip.age++;
-					total++;
-					if (owner !== -1 && owner !== tip.id && tip.age > 4) {
-						done.push(tip); // se funde con otro hilo (anastomosis)
-						continue;
-					}
-					if (owner === -1) grid[gi] = tip.id;
-					next.push(tip);
-					const chance = tip.depth === 0 ? 0.14 : tip.depth === 1 ? 0.11 : 0.08;
-					if (tip.age > 3 && rand() < chance) {
-						const side = rand() < 0.5 ? -1 : 1;
-						next.push({
-							x: nx, y: ny,
-							a: tip.a + side * (0.35 + rand() * 0.6),
-							curve: (rand() - 0.5) * 0.1,
-							depth: tip.depth + 1, id: nextId++, age: 0, pts: [nx, ny], t0: time,
-						});
-					}
-				}
-				tips = next;
-			}
-			done.push(...tips);
-			tMax = time;
-
-			// Motas: puntos del micelio bien repartidos, lejos de la columna del formulario.
-			const candidates: number[] = [];
-			const column = vw > 900 ? 330 : 0;
-			const limitY = vh * 1.2 - 70;
-			for (const tip of done) {
-				for (let i = 4; i < tip.pts.length; i += 12) {
-					const x = tip.pts[i];
-					const y = tip.pts[i + 1];
-					if (x < 46 || x > vw - 46 || y < vh * 0.2 + 70 || y > limitY) continue;
-					if (Math.abs(x - cx) < column) continue;
-					candidates.push(x, y);
-				}
-			}
-			const count = clamp(Math.round((vw * vh) / 95000), 5, 13);
-			const centers: number[] = [];
-			if (candidates.length) {
-				let pick = Math.floor(rand() * (candidates.length / 2)) * 2;
-				centers.push(candidates[pick], candidates[pick + 1]);
-				while (centers.length / 2 < count) {
-					let best = -1;
-					let bestD = -1;
-					for (let i = 0; i < candidates.length; i += 2) {
-						let d = Infinity;
-						for (let j = 0; j < centers.length; j += 2) {
-							d = Math.min(d, Math.hypot(candidates[i] - centers[j], candidates[i + 1] - centers[j + 1]));
-						}
-						d *= 0.75 + rand() * 0.5; // reparto menos regular
-						if (d > bestD) {
-							bestD = d;
-							best = i;
-						}
-					}
-					if (best < 0) break;
-					centers.push(candidates[best], candidates[best + 1]);
-				}
-			}
-
-			motas = [];
-			for (let i = 0; i < centers.length; i += 2) {
-				const size = 0.75 + rand() * 0.6;
-				const hairs: Hair[] = [];
-				const n = 16 + Math.floor(rand() * 10);
-				for (let k = 0; k < n; k++) {
-					const long = rand() < 0.3;
-					hairs.push({
-						a: (k / n) * Math.PI * 2 + (rand() - 0.5) * 0.6,
-						len: (long ? 34 + rand() * 30 : 14 + rand() * 22) * size,
-						bend: (rand() - 0.5) * 1.5,
-						phase: rand() * Math.PI * 2,
-						curl: rand() < 0.3 ? (rand() < 0.5 ? -1 : 1) * (0.5 + rand() * 0.6) : 0,
+			// Polen: granos que nacen dentro de las manchas (más en las grandes).
+			const total = small ? 420 : 950;
+			let area = 0;
+			for (const s of stains) area += s.r * s.r;
+			grains = [];
+			for (const s of stains) {
+				const n = Math.round((total * s.r * s.r) / area);
+				for (let i = 0; i < n; i++) {
+					const soft = rand() < 0.13;
+					const a0 = rand() * TAU;
+					const d0 = Math.sqrt(rand()) * s.r * 1.1;
+					const ang = rand() * TAU;
+					const dist = 25 + Math.pow(rand(), 1.6) * 260;
+					grains.push({
+						hx: s.x + Math.cos(a0) * d0,
+						hy: s.y + Math.sin(a0) * d0,
+						th: s.burst + rand() * 0.16,
+						sx: Math.cos(ang) * dist, sy: Math.sin(ang) * dist,
+						r: soft ? 3 + rand() * 4 : 0.8 + Math.pow(rand(), 1.8) * 1.7,
+						a: soft ? 0.3 + rand() * 0.25 : 0.7 + rand() * 0.3,
+						soft,
+						amp: 10 + rand() * 26,
+						f1: 0.14 + rand() * 0.3, f2: 0.3 + rand() * 0.5,
+						p1: rand() * TAU, p2: rand() * TAU,
+						ox: 0, oy: 0, vx: 0, vy: 0,
 					});
 				}
-				motas.push({
-					x: centers[i], y: centers[i + 1],
-					rx: 5 * size, ry: 7.6 * size,
-					rot: (rand() - 0.5) * 1.2,
-					hairs,
-					phase: rand() * Math.PI * 2,
-				});
 			}
 
-			nearMax = 1;
-			branches = done.filter((tip) => tip.pts.length >= 4).map((tip) => {
-				const pts = Float32Array.from(tip.pts);
-				const near = new Float32Array(pts.length / 2);
-				for (let i = 0; i < near.length; i++) {
-					let d = Infinity;
-					for (let j = 0; j < centers.length; j += 2) {
-						d = Math.min(d, Math.hypot(pts[i * 2] - centers[j], pts[i * 2 + 1] - centers[j + 1]));
-					}
-					near[i] = d;
-					if (d > nearMax && d < Infinity) nearMax = d;
-				}
-				return { pts, t0: tip.t0, depth: Math.min(2, tip.depth), near };
-			});
 			netW = vw;
 			netH = vh;
 		}
@@ -303,9 +327,11 @@
 			const maxScroll = Math.max(1, document.documentElement.scrollHeight - vh);
 			const yp = projects ? projects.getBoundingClientRect().top + sy : maxScroll * 0.6;
 			const yc = contact ? contact.getBoundingClientRect().top + sy : maxScroll * 0.9;
-			s1 = Math.max(vh * 0.8, yp - vh * 0.36);
+			const banner = document.querySelector('.transition-banner');
+			const br = banner?.getBoundingClientRect();
+			// la bola viaja a media pantalla: revienta justo al terminar de cruzar el lema
+			s1 = Math.max(vh * 0.8, br ? br.top + sy + br.height * 0.8 - vh * 0.5 : yp - vh * 0.36);
 			s2 = Math.max(s1 + vh * 0.5, Math.min(yc - vh * 0.45, maxScroll - vh * 0.6));
-			mSpan = Math.min(vh * 1.05, (s2 - s1) * 0.8);
 			qSpan = Math.max(120, Math.min(vh * 0.75, maxScroll - 8 - s2));
 
 			portrait = document.getElementById('portrait-sketch') as SVGSVGElement | null;
@@ -319,7 +345,7 @@
 				}));
 			}
 
-			if (!branches.length || Math.abs(netW - vw) > 2 || Math.abs(netH - vh) > 130) buildNetwork();
+			if (!stains.length || Math.abs(netW - vw) > 2 || Math.abs(netH - vh) > 130) buildStains();
 			dirty = true;
 		}
 
@@ -349,6 +375,27 @@
 		let lastPos: { x: number; y: number } | null = null;
 		let roll = 0;
 		let backWasBusy = false;
+
+		// el ratón (o el dedo) que roza el polen, en coordenadas de pantalla
+		const mouse = { x: 0, y: 0, vx: 0, vy: 0, speed: 0, on: false, at: 0 };
+		window.addEventListener('pointermove', (e) => {
+			const gap = Math.max(8, e.timeStamp - mouse.at) / 1000;
+			if (mouse.on && gap < 0.2) {
+				const vx = (e.clientX - mouse.x) / gap;
+				const vy = (e.clientY - mouse.y) / gap;
+				mouse.vx += (vx - mouse.vx) * 0.5;
+				mouse.vy += (vy - mouse.vy) * 0.5;
+				mouse.speed = Math.min(2400, Math.hypot(mouse.vx, mouse.vy));
+			}
+			mouse.x = e.clientX;
+			mouse.y = e.clientY;
+			mouse.at = e.timeStamp;
+			mouse.on = true;
+		}, { passive: true });
+		const mouseOff = () => { mouse.on = false; };
+		document.documentElement.addEventListener('pointerleave', mouseOff);
+		window.addEventListener('pointercancel', mouseOff);
+		window.addEventListener('blur', mouseOff);
 
 		function blob(ctx: CanvasRenderingContext2D, r: number, time: number, wobble: number) {
 			const n = 28;
@@ -423,123 +470,91 @@
 			return pos;
 		}
 
-		function drawBack(now: number, m: number, q: number) {
+		function drawBack(now: number, m: number, q: number, dt: number) {
 			const time = (now - start) / 1000;
 			bctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
 			bctx!.clearRect(0, 0, vw, back!.height / dpr);
 			if (m <= 0) return;
 
 			const par = clamp((ss - s1) / Math.max(1, s2 + qSpan - s1)) * vh * 0.2;
-			const tNow = Math.pow(m, 0.85) * (tMax + 2);
-			const gather = easeInOut(q);
-			const reach = q > 0 ? (1 - gather) * nearMax * 1.02 : Infinity;
+			const fading = q > 0;
 
 			bctx!.save();
 			bctx!.translate(0, -par);
-			bctx!.lineCap = 'round';
-			bctx!.lineJoin = 'round';
 
-			const widths = [1.9, 1.3, 0.9];
-			const alphas = [0.9, 0.78, 0.62];
-			const tipsX: number[] = [];
-			const tipsY: number[] = [];
-			for (let depth = 0; depth < 3; depth++) {
-				bctx!.beginPath();
-				for (const b of branches) {
-					if (b.depth !== depth) continue;
-					const shown = tNow - b.t0;
-					if (shown <= 0) continue;
-					const n = b.pts.length / 2;
-					const whole = Math.min(n - 1, Math.floor(shown));
-					const frac = shown - whole;
-					let pen = false;
-					for (let i = 0; i <= whole; i++) {
-						if (b.near[i] > reach) {
-							pen = false;
-							continue;
-						}
-						if (!pen) {
-							bctx!.moveTo(b.pts[i * 2], b.pts[i * 2 + 1]);
-							pen = true;
-						} else {
-							bctx!.lineTo(b.pts[i * 2], b.pts[i * 2 + 1]);
-						}
-					}
-					if (pen && whole < n - 1) {
-						const x = lerp(b.pts[whole * 2], b.pts[whole * 2 + 2], frac);
-						const y = lerp(b.pts[whole * 2 + 1], b.pts[whole * 2 + 3], frac);
-						bctx!.lineTo(x, y);
-						tipsX.push(x);
-						tipsY.push(y);
-					}
-				}
-				bctx!.lineWidth = widths[depth];
-				bctx!.strokeStyle = `rgba(${GOLD}, ${alphas[depth]})`;
-				bctx!.stroke();
-			}
-
-			// puntas vivas del micelio
-			if (tipsX.length) {
-				bctx!.fillStyle = `rgba(${GOLD}, 0.95)`;
-				bctx!.beginPath();
-				for (let i = 0; i < tipsX.length; i++) {
-					bctx!.moveTo(tipsX[i] + 1.7, tipsY[i]);
-					bctx!.arc(tipsX[i], tipsY[i], 1.7, 0, Math.PI * 2);
-				}
-				bctx!.fill();
-			}
-
-			// el núcleo: la bola, que se va gastando en hilos
-			const hubR = ballR * lerp(1, 0.42, smooth(0, 0.35, m));
-			const hubAlpha = 1 - smooth(0.15, 0.7, q);
-			if (hubAlpha > 0.01) drawBall(bctx!, cx, hubY, hubR, time, 0.05, hubAlpha);
-
-			// motas
-			if (q > 0) {
-				const body = clamp(q / 0.55);
-				const hair = smooth(0.25, 1, q);
-				for (const mota of motas) {
-					const mx = mota.x + Math.sin(time * 0.35 + mota.phase) * 5 * gather;
-					const my = mota.y + Math.cos(time * 0.28 + mota.phase * 1.7) * 6 * gather;
-					const rot = mota.rot + Math.sin(time * 0.22 + mota.phase) * 0.25 * gather;
-					bctx!.save();
-					bctx!.translate(mx, my);
-					bctx!.rotate(rot);
-					if (hair > 0) {
-						bctx!.beginPath();
-						for (const h of mota.hairs) {
-							const a = h.a + Math.sin(time * 0.9 + h.phase) * 0.13;
-							const len = h.len * hair;
-							const sx = Math.cos(a) * mota.rx * 0.6;
-							const sy = Math.sin(a) * mota.ry * 0.6;
-							const ex = sx + Math.cos(a) * len;
-							const ey = sy + Math.sin(a) * len;
-							const bend = h.bend + Math.sin(time * 0.7 + h.phase * 1.3) * 0.18;
-							const mxp = (sx + ex) / 2 - Math.sin(a) * len * 0.35 * bend;
-							const myp = (sy + ey) / 2 + Math.cos(a) * len * 0.35 * bend;
-							bctx!.moveTo(sx, sy);
-							if (h.curl) {
-								// algunos pelos se rizan en la punta
-								const ca = a + h.curl * 1.9;
-								bctx!.bezierCurveTo(mxp, myp, ex + Math.cos(a) * len * 0.18, ey + Math.sin(a) * len * 0.18, ex + Math.cos(ca) * len * 0.22, ey + Math.sin(ca) * len * 0.22);
-							} else {
-								bctx!.quadraticCurveTo(mxp, myp, ex, ey);
-							}
-						}
-						bctx!.lineWidth = 0.95;
-						bctx!.strokeStyle = `rgba(${GOLD_DEEP}, 0.9)`;
-						bctx!.stroke();
-					}
-					const k = Math.max(0, easeOutBack(body));
+			// manchas: primero la gota que vuela desde el impacto, luego el borrón que se abre
+			for (const s of stains) {
+				const melt = fading ? smooth(0, 0.22, q - s.burst) : 0;
+				if (melt >= 1) continue;
+				if (m < s.arrive) {
+					const t = m / s.arrive;
+					const e = 1 - Math.pow(1 - t, 2.2);
+					const x = lerp(cx, s.x, e);
+					const y = lerp(hubY, s.y, e) - Math.sin(t * Math.PI) * s.r * 0.5;
 					bctx!.beginPath();
-					bctx!.ellipse(0, 0, mota.rx * k, mota.ry * k, 0, 0, Math.PI * 2);
-					bctx!.fillStyle = `rgba(${GOLD}, 1)`;
+					bctx!.arc(x, y, Math.max(2, s.r * 0.16), 0, Math.PI * 2);
+					bctx!.fillStyle = `rgba(${s.color}, 0.9)`;
 					bctx!.fill();
-					bctx!.lineWidth = 1;
-					bctx!.strokeStyle = `rgba(${GOLD_DEEP}, 0.8)`;
-					bctx!.stroke();
-					bctx!.restore();
+					continue;
 				}
+				const land = clamp((m - s.arrive) / 0.3);
+				const k = Math.max(0, easeOutBack(land)) * (1 - melt * 0.35);
+				if (k <= 0.001) continue;
+				bctx!.save();
+				bctx!.translate(s.x, s.y);
+				bctx!.rotate(s.rot);
+				bctx!.scale(s.r * k, s.r * k);
+				bctx!.rotate(-s.rot);
+				bctx!.fillStyle = `rgba(${s.color}, ${s.alpha * (1 - melt)})`;
+				bctx!.fill(s.path);
+				bctx!.restore();
+			}
+
+			// polen: cada mancha que se deshace suelta sus granos, que flotan y huyen del ratón
+			if (fading) {
+				const R = 150;
+				const damp = Math.exp(-dt * 1.9);
+				const touching = mouse.on;
+				for (const g of grains) {
+					const rel = q - g.th;
+					if (rel <= 0) {
+						g.ox = g.oy = g.vx = g.vy = 0;
+						continue;
+					}
+					const free = smooth(0, 0.27, rel);
+					const wx = (Math.sin(time * g.f1 + g.p1) + 0.5 * Math.sin(time * g.f2 + g.p2)) * g.amp;
+					const wy = (Math.cos(time * g.f1 * 0.83 + g.p2) + 0.5 * Math.sin(time * g.f2 * 1.3 + g.p1)) * g.amp;
+					const hold = Math.min(1, free * 3);
+					const x = g.hx + free * (g.sx + wx) + g.ox * hold;
+					const y = g.hy + free * (g.sy + wy) + g.oy * hold;
+
+					if (touching) {
+						const dx = x - mouse.x;
+						const dy = y - par - mouse.y;
+						const d2 = dx * dx + dy * dy;
+						if (d2 < R * R) {
+							const d = Math.sqrt(d2) || 1;
+							const k = 1 - d / R;
+							const push = k * k * (520 + mouse.speed * 1.1) * hold;
+							g.vx += ((dx / d) * push + mouse.vx * k * 1.6) * dt;
+							g.vy += ((dy / d) * push + mouse.vy * k * 1.6) * dt;
+						}
+					}
+					g.vx = (g.vx - g.ox * 1.1 * dt) * damp;
+					g.vy = (g.vy - g.oy * 1.1 * dt) * damp;
+					g.ox += g.vx * dt;
+					g.oy += g.vy * dt;
+
+					const size = g.soft ? g.r * 2.4 : (g.r * 2) / CORE;
+					const twinkle = 0.82 + 0.18 * Math.sin(time * g.f2 * 2 + g.p1);
+					bctx!.globalAlpha = g.a * Math.min(1, rel / 0.04) * twinkle;
+					bctx!.drawImage(g.soft ? softSprite : grainSprite, x - size / 2, y - size / 2, size, size);
+				}
+				bctx!.globalAlpha = 1;
+				const calm = Math.exp(-dt * 6);
+				mouse.vx *= calm;
+				mouse.vy *= calm;
+				mouse.speed *= calm;
 			}
 			bctx!.restore();
 		}
@@ -579,7 +594,10 @@
 			if (Math.abs(target - ss) < 0.1) ss = target;
 			if (ss !== before) dirty = true;
 
-			const m = reduceMotion ? 0 : clamp((ss - s1) / mSpan);
+			// la salpicadura es un golpe: dura lo mismo se baje rápido o despacio
+			const wasSplash = splash;
+			if (!reduceMotion) splash = clamp(splash + (ss >= s1 ? dt / 0.85 : -dt / 0.45));
+			const m = splash;
 			const q = reduceMotion ? 0 : clamp((ss - s2) / qSpan);
 
 			const pos = drawFront(now, m);
@@ -594,7 +612,7 @@
 			lastPos = where;
 
 			const busy = m > 0;
-			if (busy ? dirty || q > 0 || (m < 1 && ss !== target) : backWasBusy) drawBack(now, m, q);
+			if (busy ? dirty || q > 0 || splash !== wasSplash : backWasBusy) drawBack(now, m, q, dt);
 			backWasBusy = busy;
 			dirty = false;
 
