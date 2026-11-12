@@ -103,6 +103,40 @@
 		let t0 = 0;
 		let visible = true;
 
+		// Una vez trazado, casi todo el dibujo solo cambia cuando «hierve» la línea
+		// (cada 150 ms): esa parte vive en su propio lienzo, debajo, y solo se
+		// repinta entonces. En el de arriba quedan el pelo que ondea y las gotas,
+		// lo único que se traza de verdad a 60 fps (y solo se borra su zona).
+		const layer = document.createElement('canvas');
+		layer.setAttribute('aria-hidden', 'true');
+		layer.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;';
+		canvas.style.position = 'relative';
+		stage.insertBefore(layer, canvas);
+		const lctx = layer.getContext('2d');
+		let layerFrame = -1;
+		let split = false; // ¿el lienzo de arriba ya solo lleva lo que se mueve?
+		// zonas (en unidades del dibujo) donde viven el pelo y las gotas, con margen
+		const LIVE = [
+			[838, 768, W + 12, H + 22],
+			[668, 692, 748, 852],
+		];
+		type Group = { lw: number; still: Line[]; flow: Line[]; all: Line[] };
+		let groups: Group[] = [];
+		const dropLines = lines.filter((line) => line.drop);
+
+		function regroup() {
+			const map = new Map<number, Group>();
+			for (const line of lines) {
+				const lw = Math.max(1, Math.round(line.w * scale * 0.82 * 2.5) / 2.5);
+				let g = map.get(lw);
+				if (!g) map.set(lw, (g = { lw, still: [], flow: [], all: [] }));
+				g.all.push(line);
+				if (line.drop) continue;
+				(line.flow ? g.flow : g.still).push(line);
+			}
+			groups = Array.from(map.values());
+		}
+
 		function resize() {
 			const rect = stage!.getBoundingClientRect();
 			width = rect.width;
@@ -112,9 +146,15 @@
 			canvas!.width = Math.floor(width * dpr);
 			canvas!.height = Math.floor(height * dpr);
 			ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+			layer.width = canvas!.width;
+			layer.height = canvas!.height;
+			lctx?.setTransform(dpr, 0, 0, dpr, 0, 0);
+			layerFrame = -1;
+			split = false;
 			scale = Math.min(width / W, height / H);
 			offX = (width - W * scale) / 2;
 			offY = (height - H * scale) / 2;
+			regroup();
 			return true;
 		}
 
@@ -133,25 +173,7 @@
 			const boil = reduceMotion ? 0 : 0.55 / scale * Math.min(1, scale * 2.2);
 			const alive = reduceMotion ? 0 : Math.max(0, Math.min(1, (elapsed - BUILD_MS) / 900));
 
-			ctx!.clearRect(0, 0, width, height);
-			ctx!.lineCap = 'round';
-			ctx!.lineJoin = 'round';
-			ctx!.strokeStyle = INK;
-
-			// Agrupa por grosor para trazar en pocos pasos.
-			const buckets = new Map<number, Line[]>();
-			const drops: Line[] = [];
-			for (const line of lines) {
-				if (line.drop && alive > 0) {
-					drops.push(line);
-					continue;
-				}
-				const lw = Math.max(1, Math.round(line.w * scale * 0.82 * 2.5) / 2.5);
-				let list = buckets.get(lw);
-				if (!list) buckets.set(lw, (list = []));
-				list.push(line);
-			}
-
+			let pen = ctx!; // dónde traza `trace`
 			const trace = (line: Line, dx: number, dy: number) => {
 				const local = build >= 1 ? 1 : (build - line.start * 0.92) / line.dur;
 				if (local <= 0) return;
@@ -179,23 +201,58 @@
 					const px = offX + (x + dx) * scale;
 					const py = offY + (y + dy) * scale;
 					if (i === 0) {
-						ctx!.moveTo(px, py);
-						if (n === 1 || line.len === 0) ctx!.lineTo(px + 0.01, py);
+						pen.moveTo(px, py);
+						if (n === 1 || line.len === 0) pen.lineTo(px + 0.01, py);
 					} else {
-						ctx!.lineTo(px, py);
+						pen.lineTo(px, py);
 					}
 				}
 			};
+			const strokeAll = (pick: (g: Group) => Line[]) => {
+				pen.lineCap = 'round';
+				pen.lineJoin = 'round';
+				pen.strokeStyle = INK;
+				for (const g of groups) {
+					const list = pick(g);
+					if (!list.length) continue;
+					pen.lineWidth = g.lw;
+					pen.beginPath();
+					for (const line of list) trace(line, 0, 0);
+					pen.stroke();
+				}
+			};
 
-			for (const [lw, list] of buckets) {
-				ctx!.lineWidth = lw;
-				ctx!.beginPath();
-				for (const line of list) trace(line, 0, 0);
-				ctx!.stroke();
+			const cached = build >= 1 && !reduceMotion && !!lctx;
+			if (!cached) {
+				// mientras se traza (o sin animación): todo de una vez, como siempre
+				ctx!.clearRect(0, 0, width, height);
+				strokeAll((g) => g.all);
+				return;
 			}
+
+			if (layerFrame !== boilFrame) {
+				layerFrame = boilFrame;
+				pen = lctx!;
+				lctx!.clearRect(0, 0, width, height);
+				strokeAll((g) => g.still);
+				pen = ctx!;
+			}
+			if (!split) {
+				split = true;
+				ctx!.clearRect(0, 0, width, height);
+			} else {
+				for (const [x0, y0, x1, y1] of LIVE) {
+					ctx!.clearRect(offX + x0 * scale - 2, offY + y0 * scale - 2, (x1 - x0) * scale + 4, (y1 - y0) * scale + 4);
+				}
+			}
+			strokeAll((g) => g.flow);
+			const drops = dropLines;
 
 			// Las gotas caen hacia la boca, en bucle.
 			if (drops.length) {
+				ctx!.lineCap = 'round';
+				ctx!.lineJoin = 'round';
+				ctx!.strokeStyle = INK;
 				for (let k = 0; k < drops.length; k++) {
 					const line = drops[k];
 					const u = (time / 1.9 + (line.pts[1] > 770 ? 0.5 : 0)) % 1;

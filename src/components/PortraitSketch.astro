@@ -36,6 +36,8 @@ const d = 'M13.6 119.2C17.2 115.8 16.8 111.6 24.3 109.1C31.8 106.6 34.5 114.7 36
 	figure.about-portrait:has(.portrait-sketch) {
 		width: 232px;
 		height: 286px;
+		/* el trazo y las pupilas solo repintan esta caja */
+		contain: layout paint;
 	}
 
 	.portrait-sketch {
