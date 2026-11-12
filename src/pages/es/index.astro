@@ -1,6 +1,8 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import StructureParticles from '../../components/StructureParticles.astro';
+import CadavreExquis from '../../components/CadavreExquis.astro';
+import GoldenThread from '../../components/GoldenThread.astro';
+import PortraitSketch from '../../components/PortraitSketch.astro';
 import { i18nEnabled, useTranslations } from '../../i18n/utils';
 
 if (!i18nEnabled) return Astro.redirect('/');
@@ -9,6 +11,7 @@ const t = useTranslations('es');
 ---
 
 <Layout title="arsomnia" lang="es">
+	<GoldenThread />
 	<!-- Hero Section -->
 	<section id="inicio" class="hero">
 		<div class="hero-layout">
@@ -28,7 +31,7 @@ const t = useTranslations('es');
 			</div>
 			</div>
 			<div class="hero-sketch">
-				<StructureParticles />
+				<CadavreExquis />
 			</div>
 		</div>
 	</section>
@@ -38,12 +41,7 @@ const t = useTranslations('es');
 		<div class="container">
 			<div class="about-header">
 				<figure class="about-portrait">
-					<img
-						src="/sergio_corcuera.jpeg"
-						alt="Retrato de Orlando Corcuera"
-						loading="lazy"
-						decoding="async"
-					/>
+					<PortraitSketch label="Retrato de Orlando Corcuera" />
 				</figure>
 				<h2 class="about-headline">{t('about.headline')}</h2>
 				<p class="about-subtitle">{t('about.subtitle')}</p>
