@@ -2,39 +2,39 @@
   "nav": {
     "home": "Home",
     "about": "About",
-    "projects": "Projects",
+    "projects": "Work",
     "contact": "Contact"
   },
   "hero": {
-    "title": "I Build Your<br><span class='hero-title-accent'>Ideas</span>",
-    "subtitle": "I help you make reality those <strong>creative ideas</strong> you have in your notebook-head-someday list",
-    "cta_primary": "View Projects",
-    "cta_secondary": "Contact Me"
+    "title": "Great ideas get stuck in notebooks.<br><span class='hero-title-accent'>I build them.</span>",
+    "subtitle": "I design and build <strong>portfolios, websites and web apps</strong> for artists and creative businesses — so your idea becomes something people can see, click and share.",
+    "cta_primary": "See my work",
+    "cta_secondary": "Free idea check"
   },
   "about": {
     "headline": "Hi, I'm Orlando — Product builder",
-    "subtitle": "Web developer (3+ years) specialized in low-code/no-code automation.",
+    "subtitle": "For the past three years I've been building creative websites and web apps",
     "download_cv": "Download my CV",
-    "box_1_title": "Technical",
-    "box_1_line1": "I can read and maintain code.",
-    "box_1_line3": "Stack: HTML • CSS • JS • React • Next • Git",
-    "box_2_title": "Analytical",
-    "box_2_line1": "I identify and solve problems.",
-    "box_2_line2": "Stack: NotebookLM • Elicit • Perplexity • Claude • Multidisciplinary Thinking",
-    "box_3_title": "No-code/Low-code",
-    "box_3_line1": "I work with efficient tools.",
-    "box_3_line2": "Stack: N8N • Airtable • Lovable • Cursor • Figma Make",
-    "what_i_build_title": "What I build with these skills:",
-    "what_i_build_1": "Automated workflows that save 5-15h/week",
-    "what_i_build_2": "Custom apps in 2-4 weeks (not months)",
-    "what_i_build_3": "API integrations between existing tools",
-    "what_i_build_4": "Documentation for autonomous teams",
-    "meta": "Languages: EN/FR/ES • Toulouse/remote • Freelance and Full-time",
+    "intro": "I work between two worlds: I handle the technical build, and I care about how things look and feel. So you don't have to explain your idea to a developer and then again to a designer. You explain it once, to me.",
+    "how_i_work_title": "How I work",
+    "how_1_title": "Simple.",
+    "how_1_text": "Clear plans, plain-language updates, no jargon.",
+    "how_2_title": "Fast.",
+    "how_2_text": "Short cycles, so you see your idea take shape in days, not only at the end.",
+    "how_3_title": "Creative.",
+    "how_3_text": "I'll bring ideas to the table, not just follow a brief.",
+    "stack": "HTML • CSS • JavaScript • React • Next.js • WordPress • Git",
+    "what_i_build_title": "What I can build for you:",
+    "what_i_build_1": "Portfolios that feel like your work — for artists, photographers, performers and companies",
+    "what_i_build_2": "Your idea, made digital — apps, interactive experiences, a home for your project",
+    "what_i_build_3": "Website care — updates and fixes for the site you already have, no long contract",
+    "what_i_build_4": "Small automations that connect the tools you already use",
+    "meta": "English · Français · Español • Toulouse / remote • Freelance projects",
     "transition_banner": "Simplicity • <em>Speed</em> • Creativity"
   },
   "projects": {
-    "title": "Featured Projects",
-    "subtitle": "A selection of applications and automations I've built using LC/NC tools",
+    "title": "Ideas I've brought to life",
+    "subtitle": "Don't take my word for it — open them and look around.",
     "filter_apps": "Apps",
     "filter_websites": "Websites",
     "filter_automations": "Automations",
@@ -70,8 +70,8 @@
     }
   },
   "contact": {
-    "title": "Let's Talk About Your Need",
-    "subtitle": "Automation, integration, or custom application",
+    "title": "Tell me about your idea",
+    "subtitle": "Half-formed is fine. Write a few lines, or ask for a free 30-min idea check.",
     "form": {
       "name": "Name",
       "name_placeholder": "Your name",
@@ -79,10 +79,10 @@
       "email_placeholder": "your@email.com",
       "profile_type": "You are...",
       "profile_type_placeholder": "Select an option",
+      "profile_type_artist": "Artist / Creative",
+      "profile_type_small_business": "Small business",
+      "profile_type_company": "Company / Startup",
       "profile_type_recruiter": "Recruiter / HR",
-      "profile_type_company": "Company (internal need)",
-      "profile_type_entrepreneur": "Entrepreneur / Startup",
-      "profile_type_agency": "Agency / Partner",
       "profile_type_other": "Other",
       "need_type": "What is your need?",
       "need_type_placeholder": "Select an option (optional)",
@@ -93,14 +93,17 @@
       "need_type_consulting": "Consulting / Audit",
       "need_type_other": "Other / To discuss",
       "message": "Message",
-      "message_placeholder": "Tell me about your project",
-      "submit": "Send",
+      "message_placeholder": "What's your idea? Any deadline?",
+      "submit": "Send my idea",
       "sending": "Sending...",
       "success": "Thank you for your message! I'll get back to you soon.",
       "error": "Oops! There was a problem submitting the form.",
       "network_error": "Oops! There was a network problem.",
-      "trust_message": "Response within 24h • Available for freelance projects and full-time"
+      "trust_message": "Reply within 24h • Also open to remote, part-time or project-based frontend / web developer roles — CV on request"
     }
+  },
+  "meta": {
+    "title": "Orlando — Websites, portfolios & apps for artists and creative businesses | arsomnia",
+    "description": "I design and build portfolios, websites and web apps for artists, performers and small creative businesses. Toulouse / remote. English, French, Spanish."
   }
 }
-

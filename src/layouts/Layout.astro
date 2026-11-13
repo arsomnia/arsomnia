@@ -4,10 +4,15 @@ import { getLangFromUrl, i18nEnabled, useTranslations } from '../i18n/utils';
 
 interface Props {
 	title?: string;
+	description?: string;
 	lang?: string;
 }
 
-const { title = "arsomnia", lang } = Astro.props;
+const {
+	title = "arsomnia",
+	description = "I design and build portfolios, websites and web apps for artists and creative businesses. Toulouse / remote. English, French, Spanish.",
+	lang,
+} = Astro.props;
 const currentLang = (lang || getLangFromUrl(Astro.url)) as 'es' | 'fr' | 'en';
 const t = useTranslations(currentLang);
 const homeUrl = currentLang === 'en' ? '/' : `/${currentLang}/`;
@@ -29,6 +34,9 @@ const homeUrl = currentLang === 'en' ? '/' : `/${currentLang}/`;
 		<link rel="manifest" href="/favicon/site.webmanifest" />
 		
 		<title>{title}</title>
+		<meta name="description" content={description} />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={description} />
 	</head>
 	<body>
 		<nav class="nav">

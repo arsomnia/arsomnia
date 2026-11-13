@@ -8,7 +8,7 @@ import { useTranslations } from '../i18n/utils';
 const t = useTranslations('en');
 ---
 
-<Layout title="arsomnia" lang="en">
+<Layout title={t('meta.title')} description={t('meta.description')} lang="en">
 	<GoldenThread />
 	<!-- Hero Section -->
 	<section id="inicio" class="hero">
@@ -45,57 +45,38 @@ const t = useTranslations('en');
 				<p class="about-subtitle">{t('about.subtitle')}</p>
 			</div>
 
+			<div class="about-intro">
+				<p class="about-subtitle">{t('about.intro')}</p>
+			</div>
+
+			<h3 class="what-i-build-title">{t('about.how_i_work_title')}</h3>
 			<div class="about-boxes">
 				<div class="about-box">
 					<div class="box-header">
-						<div class="box-icon">
-							<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-								<polyline points="16 18 22 12 16 6"></polyline>
-								<polyline points="8 6 2 12 8 18"></polyline>
-							</svg>
-						</div>
-						<h3 class="box-title">{t('about.box_1_title')}</h3>
+						<h3 class="box-title">{t('about.how_1_title')}</h3>
 					</div>
 					<div class="box-content">
-						<p>{t('about.box_1_line1')}</p>
-						<p class="box-spacer"></p>
-						<p>{t('about.box_1_line3')}</p>
+						<p>{t('about.how_1_text')}</p>
 					</div>
 				</div>
-
 				<div class="about-box">
 					<div class="box-header">
-						<div class="box-icon">
-							<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-								<circle cx="12" cy="12" r="10"></circle>
-								<circle cx="12" cy="12" r="2.5" fill="currentColor"></circle>
-							</svg>
-						</div>
-						<h3 class="box-title">{t('about.box_2_title')}</h3>
+						<h3 class="box-title">{t('about.how_2_title')}</h3>
 					</div>
 					<div class="box-content">
-						<p>{t('about.box_2_line1')}</p>
-						<p class="box-spacer"></p>
-						<p>{t('about.box_2_line2')}</p>
+						<p>{t('about.how_2_text')}</p>
 					</div>
 				</div>
-
 				<div class="about-box">
 					<div class="box-header">
-						<div class="box-icon">
-							<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-								<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-							</svg>
-						</div>
-						<h3 class="box-title">{t('about.box_3_title')}</h3>
+						<h3 class="box-title">{t('about.how_3_title')}</h3>
 					</div>
 					<div class="box-content">
-						<p>{t('about.box_3_line1')}</p>
-						<p class="box-spacer"></p>
-						<p>{t('about.box_3_line2')}</p>
+						<p>{t('about.how_3_text')}</p>
 					</div>
 				</div>
 			</div>
+
 
 			<div class="about-what-i-build">
 				<h3 class="what-i-build-title">{t('about.what_i_build_title')}</h3>
@@ -217,10 +198,10 @@ const t = useTranslations('en');
 						<label for="profile-type">{t('contact.form.profile_type')}</label>
 						<select id="profile-type" name="profile-type" required>
 							<option value="">{t('contact.form.profile_type_placeholder')}</option>
+							<option value="artist">{t('contact.form.profile_type_artist')}</option>
+							<option value="small-business">{t('contact.form.profile_type_small_business')}</option>
+							<option value="company-startup">{t('contact.form.profile_type_company')}</option>
 							<option value="recruiter">{t('contact.form.profile_type_recruiter')}</option>
-							<option value="company">{t('contact.form.profile_type_company')}</option>
-							<option value="entrepreneur">{t('contact.form.profile_type_entrepreneur')}</option>
-							<option value="agency">{t('contact.form.profile_type_agency')}</option>
 							<option value="other">{t('contact.form.profile_type_other')}</option>
 						</select>
 					</div>
@@ -572,6 +553,19 @@ const t = useTranslations('en');
 	display: inline-flex;
 	align-items: center;
 	gap: 0.75rem;
+}
+
+.about-intro {
+	display: flex;
+	justify-content: center;
+	text-align: center;
+	margin: -2.5rem auto 5rem;
+}
+
+.about-stack {
+	border-top: none;
+	padding-top: 0;
+	margin: -3.25rem auto 5.5rem;
 }
 
 .about-what-i-build {
